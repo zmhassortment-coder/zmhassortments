@@ -19,15 +19,35 @@ const cookieParser = require("cookie-parser");
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(cors({
-  origin: [
-    "http://localhost:3001",
-    "http://localhost:3000"
-  ],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+
+const envOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  ...envOrigins,
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow server-to-server tools (no browser origin header)
+    if (!origin) return callback(null, true);
+
+    const isNetlify = /\.netlify\.app$/.test(origin);
+    const isAllowed = allowedOrigins.includes(origin) || isNetlify;
+
+    if (isAllowed) return callback(null, true);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   credentials: true,
-}));
-app.options("/*", cors());
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
 
 const dbUrl = process.env.DB_URL;
