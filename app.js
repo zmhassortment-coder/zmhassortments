@@ -26,8 +26,7 @@ const envOrigins = (process.env.CORS_ORIGINS || "")
   .filter(Boolean);
 
 const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:3001",
+  "https://gleeful-sunflower-73d68e.netlify.app/",
   ...envOrigins,
 ];
 
