@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require("jsonwebtoken");
 const Users = require("../models/UserModel")
-const SECRET_KEY = process.env.SECRET_KEY;
+const SECRET_KEY = process.env.SECRET_KEY || process.env.JWT_SECRET;
 
 const CreateUser = async(req, res) => {
     try {
@@ -35,6 +35,12 @@ const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    if (!SECRET_KEY) {
+      return res.status(500).json({
+        message: "Server auth is not configured",
+      });
+    }
+
     const user = await Users.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -57,19 +63,20 @@ const loginUser = async (req, res) => {
     };
 
     const isProduction = process.env.NODE_ENV === "production";
+    const cookieDomain = process.env.COOKIE_DOMAIN; // e.g. ".yourdomain.com" (no protocol)
     const cookieOptionsToken = {
       httpOnly: false,
       secure: isProduction,
       sameSite: isProduction ? "None" : "Lax",
       maxAge: 2 * 24 * 60 * 60 * 1000,
-      ...(isProduction && { domain: ".http://localhost:9000" }),
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     };
     const cookieOptionsUser = {
       httpOnly: false,
       secure: isProduction,
       sameSite: isProduction ? "None" : "Lax",
       maxAge: 2 * 24 * 60 * 60 * 1000,
-      ...(isProduction && { domain: "https://localhost:9000" }),
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     };
 
     res
