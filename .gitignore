@@ -1,0 +1,19 @@
+# Environment
+.env
+.env.*
+
+# Dependencies
+node_modules/
+
+# Frontend artifacts (API-only repo)
+src/
+public/
+build/
+tailwind.config.js
+
+# Local/runtime files
+logs/
+*.log
+
+# Misc local files
+file.rest
