@@ -6,13 +6,21 @@ exports.addToCart = async (req, res) => {
   try {
     const userId = req.user.id;
     const { product_id, quantity = 1 } = req.body;
+    const normalizedQty = Number(quantity);
 
     const product = await Product.findById(product_id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    const price = parseFloat(product.price) || 0; // ✅ handles both string & number
+    if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid quantity" });
+    }
+
+    const price = parseFloat(product.price) || 0;
+    const productStock = Number(product.quantity);
+    const requiresAvailabilityConfirmation =
+      product.confirm_availability_before_payment === true;
 
     let cart = await Cart.findOne({ user_id: userId });
 
@@ -25,14 +33,39 @@ exports.addToCart = async (req, res) => {
     );
 
     if (existingItem) {
-      existingItem.quantity += Number(quantity);
+      const nextQty = existingItem.quantity + normalizedQty;
+      if (
+        !requiresAvailabilityConfirmation &&
+        Number.isFinite(productStock) &&
+        productStock >= 0 &&
+        nextQty > productStock
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${productStock} in stock`,
+        });
+      }
+
+      existingItem.quantity = nextQty;
       existingItem.total = existingItem.quantity * price;
     } else {
+      if (
+        !requiresAvailabilityConfirmation &&
+        Number.isFinite(productStock) &&
+        productStock >= 0 &&
+        normalizedQty > productStock
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${productStock} in stock`,
+        });
+      }
+
       cart.items.push({
         product_id,
-        quantity: Number(quantity),
+        quantity: normalizedQty,
         price,
-        total: price * Number(quantity),
+        total: price * normalizedQty,
       });
     }
 
@@ -68,6 +101,7 @@ exports.updateCartItem = async (req, res) => {
   try {
     const userId = req.user.id;
     const { itemId, quantity } = req.body;
+    const normalizedQty = Number(quantity);
 
     const cart = await Cart.findOne({ user_id: userId });
     if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
@@ -75,7 +109,32 @@ exports.updateCartItem = async (req, res) => {
     const item = cart.items.id(itemId);
     if (!item) return res.status(404).json({ success: false, message: "Item not found" });
 
-    item.quantity = Number(quantity);
+    if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid quantity" });
+    }
+
+    const product = await Product.findById(item.product_id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    const productStock = Number(product.quantity);
+    const requiresAvailabilityConfirmation =
+      product.confirm_availability_before_payment === true;
+
+    if (
+      !requiresAvailabilityConfirmation &&
+      Number.isFinite(productStock) &&
+      productStock >= 0 &&
+      normalizedQty > productStock
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: `Only ${productStock} in stock`,
+      });
+    }
+
+    item.quantity = normalizedQty;
     item.total = item.price * item.quantity;
 
     cart.subtotal = cart.items.reduce((sum, i) => sum + i.total, 0);

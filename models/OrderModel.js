@@ -50,6 +50,37 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    subtotal: {
+      type: Number,
+      required: false,
+    },
+    delivery_fee: {
+      type: Number,
+      required: false,
+      default: 0,
+    },
+    delivery_method: {
+      type: String,
+      enum: ["home_delivery", "pickup_station"],
+      required: false,
+    },
+    delivery_state: {
+      type: String,
+      required: false,
+    },
+    delivery_area: {
+      type: String,
+      required: false,
+    },
+    transport_station: {
+      type: String,
+      required: false,
+    },
+    stock_deducted: {
+      type: Boolean,
+      required: false,
+      default: false,
+    },
     status: {
       type: String,
       enum: ["pending", "paid", "shipped", "delivered", "cancelled"],

@@ -1,8 +1,19 @@
 const Order = require("../models/OrderModel");
+const Product = require("../models/ProductModel");
 
 const createOrder = async (req, res) => {
   try {
-    const { items, address, payment_method, notes } = req.body;
+    const {
+      items,
+      address,
+      payment_method,
+      notes,
+      delivery_fee = 0,
+      delivery_method,
+      delivery_state,
+      delivery_area,
+      transport_station,
+    } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
@@ -38,14 +49,26 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const orderTotal = normalizedItems.reduce(
+    const itemsSubtotal = normalizedItems.reduce(
       (sum, item) => sum + item.total,
       0
     );
+    const normalizedDeliveryFee = Number(delivery_fee);
+    const safeDeliveryFee =
+      Number.isFinite(normalizedDeliveryFee) && normalizedDeliveryFee > 0
+        ? normalizedDeliveryFee
+        : 0;
+    const orderTotal = itemsSubtotal + safeDeliveryFee;
 
     const order = await new Order({
       user_id: req.user._id,
       items: normalizedItems,
+      subtotal: itemsSubtotal,
+      delivery_fee: safeDeliveryFee,
+      delivery_method,
+      delivery_state,
+      delivery_area,
+      transport_station,
       total: orderTotal,
       address,
       payment_method,
@@ -142,18 +165,63 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const order = await Order.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    ).populate("user_id", "fullName email phoneNumber");
-
+    const order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({
         success: false,
         message: "Order not found",
       });
     }
+
+    if (status === "paid" && !order.stock_deducted) {
+      const productIds = order.items.map((item) => item.product_id);
+      const products = await Product.find({ _id: { $in: productIds } });
+      const productMap = new Map(products.map((p) => [String(p._id), p]));
+
+      for (const item of order.items) {
+        const product = productMap.get(String(item.product_id));
+        if (!product) {
+          return res.status(404).json({
+            success: false,
+            message: `Product ${item.product_id} no longer exists`,
+          });
+        }
+
+        const requiresAvailabilityConfirmation =
+          product.confirm_availability_before_payment === true;
+        const currentStock = Number(product.quantity);
+
+        if (
+          !requiresAvailabilityConfirmation &&
+          Number.isFinite(currentStock) &&
+          currentStock >= 0 &&
+          currentStock < Number(item.quantity)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${product.title}`,
+          });
+        }
+      }
+
+      for (const item of order.items) {
+        const product = productMap.get(String(item.product_id));
+        const currentStock = Number(product.quantity);
+        if (!Number.isFinite(currentStock) || currentStock < 0) {
+          continue;
+        }
+
+        const nextStock = Math.max(0, currentStock - Number(item.quantity));
+        product.quantity = String(nextStock);
+        await product.save();
+      }
+
+      order.stock_deducted = true;
+    }
+
+    order.status = status;
+    await order.save();
+    await order.populate("user_id", "fullName email phoneNumber");
 
     res.json({
       success: true,

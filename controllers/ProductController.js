@@ -26,6 +26,14 @@ const CreateProduct = async (req, res) => {
 
     const normalizedType =
       req.body.product_type === "interior" ? "interior" : "shop";
+    const confirmAvailability =
+      req.body.confirm_availability_before_payment === "true" ||
+      req.body.confirm_availability_before_payment === true;
+    const showStockQuantity =
+      req.body.show_stock_quantity === undefined
+        ? true
+        : req.body.show_stock_quantity === "true" ||
+          req.body.show_stock_quantity === true;
 
     const newProduct = new Product({
       merchant_id: checkIfMerchant._id,
@@ -41,6 +49,8 @@ const CreateProduct = async (req, res) => {
       max_qty: req.body.max_qty,
       discount: req.body.discount,
       shipping_locations: req.body.shipping_locations,
+      confirm_availability_before_payment: confirmAvailability,
+      show_stock_quantity: showStockQuantity,
       product_type: normalizedType,
     });
 
@@ -173,7 +183,14 @@ const updateproduct = async (req, res) => {
                 .split(",")
                 .map((v) => v.trim())
                 .filter((v) => v.length > 0);
-        } else if (["is_trending", "is_featured"].includes(field)) {
+        } else if (
+          [
+            "is_trending",
+            "is_featured",
+            "confirm_availability_before_payment",
+            "show_stock_quantity",
+          ].includes(field)
+        ) {
           product[field] =
             req.body[field] === "true" || req.body[field] === true;
         } else if (!["images", "removeImages"].includes(field)) {

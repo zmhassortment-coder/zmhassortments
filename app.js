@@ -12,6 +12,7 @@ const BannerRoutes = require("./routes/BannerRoute");
 const WishlistRoutes = require("./routes/WishlistRoutes");
 const CartRoutes = require("./routes/CartRoute");
 const OrderRoutes = require("./routes/OrderRoutes");
+const DeliverySettingsRoutes = require("./routes/DeliverySettingsRoutes");
 const cors = require("cors");
 const path = require("path");
 const cookieParser = require("cookie-parser");
@@ -71,6 +72,7 @@ app.use( BannerRoutes);
 app.use( WishlistRoutes);
 app.use( CartRoutes);
 app.use( OrderRoutes);
+app.use(DeliverySettingsRoutes);
 // Start server
 app.listen(port, (err) => {
   if (err) {

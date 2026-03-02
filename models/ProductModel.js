@@ -66,6 +66,16 @@ const productSchema = new Schema({
     required: false,
     default:[],
   },
+  confirm_availability_before_payment: {
+    type: Boolean,
+    required: false,
+    default: false,
+  },
+  show_stock_quantity: {
+    type: Boolean,
+    required: false,
+    default: true,
+  },
   product_type: {
     type: String,
     enum: ["shop", "interior"],
