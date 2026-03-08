@@ -26,9 +26,12 @@ const envOrigins = (process.env.CORS_ORIGINS || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+const normalizeOrigin = (origin = "") => String(origin).replace(/\/+$/, "");
+
 const allowedOrigins = [
-  "https://gleeful-sunflower-73d68e.netlify.app/",
-  ...envOrigins,
+  "https://zmhassortment.ng",
+  "https://www.zmhassortment.ng",
+  ...envOrigins.map(normalizeOrigin),
 ];
 
 const corsOptions = {
@@ -36,8 +39,13 @@ const corsOptions = {
     // Allow server-to-server tools (no browser origin header)
     if (!origin) return callback(null, true);
 
+    const normalizedOrigin = normalizeOrigin(origin);
     const isNetlify = /\.netlify\.app$/.test(origin);
-    const isAllowed = allowedOrigins.includes(origin) || isNetlify;
+    const isZmhDomain = /^https:\/\/([a-z0-9-]+\.)?zmhassortment\.ng$/i.test(
+      normalizedOrigin
+    );
+    const isAllowed =
+      allowedOrigins.includes(normalizedOrigin) || isNetlify || isZmhDomain;
 
     if (isAllowed) return callback(null, true);
     return callback(new Error("Not allowed by CORS"));
