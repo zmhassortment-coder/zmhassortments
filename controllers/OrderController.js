@@ -2,6 +2,7 @@ const Order = require("../models/OrderModel");
 const Product = require("../models/ProductModel");
 const Cart = require("../models/CartModel");
 const Notification = require("../models/NotificationModel");
+const mongoose = require("mongoose");
 
 const STATUS_ALIASES = {
   pending: "pending",
@@ -305,53 +306,59 @@ const updateOrderStatus = async (req, res) => {
 
     const stockWarnings = [];
     if (STOCK_CONFIRMED_STATUSES.has(status) && !order.stock_deducted) {
-      const productIds = order.items.map((item) => item.product_id);
-      const products = await Product.find({ _id: { $in: productIds } });
-      const productMap = new Map(products.map((p) => [String(p._id), p]));
+      try {
+        const productIds = order.items
+          .map((item) => item.product_id)
+          .filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+        const products = await Product.find({ _id: { $in: productIds } });
+        const productMap = new Map(products.map((p) => [String(p._id), p]));
 
-      for (const item of order.items) {
-        const product = productMap.get(String(item.product_id));
-        if (!product) {
-          stockWarnings.push(`Product ${item.product_id} no longer exists`);
-          continue;
+        for (const item of order.items) {
+          const product = productMap.get(String(item.product_id));
+          if (!product) {
+            stockWarnings.push(`Product ${item.product_id} no longer exists`);
+            continue;
+          }
+
+          const requiresAvailabilityConfirmation =
+            product.confirm_availability_before_payment === true;
+          const currentStock = Number(product.quantity);
+
+          if (
+            !requiresAvailabilityConfirmation &&
+            Number.isFinite(currentStock) &&
+            currentStock >= 0 &&
+            currentStock < Number(item.quantity)
+          ) {
+            stockWarnings.push(`Insufficient stock for ${product.title}; stock deduction skipped for this item`);
+          }
         }
 
-        const requiresAvailabilityConfirmation =
-          product.confirm_availability_before_payment === true;
-        const currentStock = Number(product.quantity);
+        for (const item of order.items) {
+          const product = productMap.get(String(item.product_id));
+          if (!product) continue;
+          const requiresAvailabilityConfirmation =
+            product.confirm_availability_before_payment === true;
+          const currentStock = Number(product.quantity);
+          if (!Number.isFinite(currentStock) || currentStock < 0) {
+            continue;
+          }
+          if (
+            !requiresAvailabilityConfirmation &&
+            currentStock < Number(item.quantity)
+          ) {
+            continue;
+          }
 
-        if (
-          !requiresAvailabilityConfirmation &&
-          Number.isFinite(currentStock) &&
-          currentStock >= 0 &&
-          currentStock < Number(item.quantity)
-        ) {
-          stockWarnings.push(`Insufficient stock for ${product.title}; stock deduction skipped for this item`);
+          const nextStock = Math.max(0, currentStock - Number(item.quantity));
+          product.quantity = String(nextStock);
+          await product.save();
         }
+
+        order.stock_deducted = true;
+      } catch (stockErr) {
+        stockWarnings.push(`Stock adjustment skipped: ${stockErr.message}`);
       }
-
-      for (const item of order.items) {
-        const product = productMap.get(String(item.product_id));
-        if (!product) continue;
-        const requiresAvailabilityConfirmation =
-          product.confirm_availability_before_payment === true;
-        const currentStock = Number(product.quantity);
-        if (!Number.isFinite(currentStock) || currentStock < 0) {
-          continue;
-        }
-        if (
-          !requiresAvailabilityConfirmation &&
-          currentStock < Number(item.quantity)
-        ) {
-          continue;
-        }
-
-        const nextStock = Math.max(0, currentStock - Number(item.quantity));
-        product.quantity = String(nextStock);
-        await product.save();
-      }
-
-      order.stock_deducted = true;
     }
 
     order.status = status;
