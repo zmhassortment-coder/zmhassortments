@@ -1,5 +1,69 @@
 const Order = require("../models/OrderModel");
 const Product = require("../models/ProductModel");
+const Cart = require("../models/CartModel");
+const Notification = require("../models/NotificationModel");
+
+const STATUS_ALIASES = {
+  pending: "pending",
+  process: "processing",
+  processing: "processing",
+  paid: "paid",
+  payed: "paid",
+  shipped: "shipped",
+  shipping: "shipped",
+  at_station: "at_station",
+  atstation: "at_station",
+  rider_assigned: "rider_assigned",
+  riderassigned: "rider_assigned",
+  ready_for_pickup: "ready_for_pickup",
+  readyforpickup: "ready_for_pickup",
+  delivered: "delivered",
+  cancelled: "cancelled",
+  canceled: "cancelled",
+};
+
+const STOCK_CONFIRMED_STATUSES = new Set([
+  "processing",
+  "paid",
+  "shipped",
+  "at_station",
+  "rider_assigned",
+  "ready_for_pickup",
+  "delivered",
+]);
+
+const normalizeStatus = (value) => {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  return STATUS_ALIASES[key] || null;
+};
+
+const STATUS_LABELS = {
+  pending: "Verifying Payment",
+  processing: "Processing",
+  paid: "Paid",
+  shipped: "Out For Shipping",
+  at_station: "Arrived At Station",
+  rider_assigned: "Rider Assigned",
+  ready_for_pickup: "Ready For Pickup",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+const parseItems = (rawItems) => {
+  if (Array.isArray(rawItems)) return rawItems;
+  if (typeof rawItems === "string") {
+    try {
+      const parsed = JSON.parse(rawItems);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 const createOrder = async (req, res) => {
   try {
@@ -14,7 +78,9 @@ const createOrder = async (req, res) => {
       delivery_area,
       transport_station,
     } = req.body;
-    if (!items || !Array.isArray(items) || items.length === 0) {
+
+    const parsedItems = parseItems(items);
+    if (!parsedItems || parsedItems.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Order items are required",
@@ -22,7 +88,12 @@ const createOrder = async (req, res) => {
     }
 
     const normalizedItems = [];
-    for (const item of items) {
+    const userCart = await Cart.findOne({ user_id: req.user._id });
+    const cartItemsByProductId = new Map(
+      (userCart?.items || []).map((ci) => [String(ci.product_id), ci])
+    );
+
+    for (const item of parsedItems) {
       const price = Number(item.price);
       const quantity = Number(item.quantity);
       if (
@@ -49,6 +120,29 @@ const createOrder = async (req, res) => {
       });
     }
 
+    // Enforce availability confirmation before checkout for products marked as required.
+    for (const item of normalizedItems) {
+      const product = await Product.findById(item.product_id).select(
+        "_id title confirm_availability_before_payment"
+      );
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found for ${item.title}`,
+        });
+      }
+
+      if (product.confirm_availability_before_payment === true) {
+        const cartItem = cartItemsByProductId.get(String(item.product_id));
+        if (!cartItem || cartItem.availability_confirmed !== true) {
+          return res.status(400).json({
+            success: false,
+            message: `Please confirm availability on WhatsApp for ${product.title} before checkout`,
+          });
+        }
+      }
+    }
+
     const itemsSubtotal = normalizedItems.reduce(
       (sum, item) => sum + item.total,
       0
@@ -59,6 +153,11 @@ const createOrder = async (req, res) => {
         ? normalizedDeliveryFee
         : 0;
     const orderTotal = itemsSubtotal + safeDeliveryFee;
+    const receiptUrl = req.file?.path || req.body?.receipt_url || "";
+    const initialStatus =
+      String(payment_method || "").toLowerCase() === "bank_transfer"
+        ? "processing"
+        : "pending";
 
     const order = await new Order({
       user_id: req.user._id,
@@ -73,6 +172,8 @@ const createOrder = async (req, res) => {
       address,
       payment_method,
       notes,
+      receipt_url: receiptUrl || undefined,
+      status: initialStatus,
     }).save();
 
     res.status(201).json({
@@ -80,6 +181,25 @@ const createOrder = async (req, res) => {
       message: "Order created successfully",
       data: order,
     });
+
+    // Fire and forget notifications
+    Notification.create({
+      recipient_role: "admin",
+      type: "order_created",
+      title: "New Order Created",
+      message: `A new order (${order._id}) was created by a customer.`,
+      order_id: order._id,
+    }).catch(() => {});
+
+    if (String(payment_method || "").toLowerCase() === "bank_transfer") {
+      Notification.create({
+        recipient_role: "admin",
+        type: "payment_submitted",
+        title: "Payment Submitted",
+        message: `Customer submitted payment for order (${order._id}).`,
+        order_id: order._id,
+      }).catch(() => {});
+    }
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -155,13 +275,23 @@ const getAllOrders = async (req, res) => {
 const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    const allowed = ["pending", "paid", "shipped", "delivered", "cancelled"];
+    const status = normalizeStatus(req.body?.status);
+    const allowed = [
+      "pending",
+      "processing",
+      "paid",
+      "shipped",
+      "at_station",
+      "rider_assigned",
+      "ready_for_pickup",
+      "delivered",
+      "cancelled",
+    ];
 
     if (!allowed.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status value",
+        message: "Invalid status value. Allowed: pending, processing, paid, shipped, at_station, rider_assigned, ready_for_pickup, delivered, cancelled",
       });
     }
 
@@ -173,7 +303,8 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (status === "paid" && !order.stock_deducted) {
+    const stockWarnings = [];
+    if (STOCK_CONFIRMED_STATUSES.has(status) && !order.stock_deducted) {
       const productIds = order.items.map((item) => item.product_id);
       const products = await Product.find({ _id: { $in: productIds } });
       const productMap = new Map(products.map((p) => [String(p._id), p]));
@@ -181,10 +312,8 @@ const updateOrderStatus = async (req, res) => {
       for (const item of order.items) {
         const product = productMap.get(String(item.product_id));
         if (!product) {
-          return res.status(404).json({
-            success: false,
-            message: `Product ${item.product_id} no longer exists`,
-          });
+          stockWarnings.push(`Product ${item.product_id} no longer exists`);
+          continue;
         }
 
         const requiresAvailabilityConfirmation =
@@ -197,17 +326,23 @@ const updateOrderStatus = async (req, res) => {
           currentStock >= 0 &&
           currentStock < Number(item.quantity)
         ) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient stock for ${product.title}`,
-          });
+          stockWarnings.push(`Insufficient stock for ${product.title}; stock deduction skipped for this item`);
         }
       }
 
       for (const item of order.items) {
         const product = productMap.get(String(item.product_id));
+        if (!product) continue;
+        const requiresAvailabilityConfirmation =
+          product.confirm_availability_before_payment === true;
         const currentStock = Number(product.quantity);
         if (!Number.isFinite(currentStock) || currentStock < 0) {
+          continue;
+        }
+        if (
+          !requiresAvailabilityConfirmation &&
+          currentStock < Number(item.quantity)
+        ) {
           continue;
         }
 
@@ -227,7 +362,17 @@ const updateOrderStatus = async (req, res) => {
       success: true,
       message: "Order status updated",
       data: order,
+      warnings: stockWarnings,
     });
+
+    Notification.create({
+      recipient_role: "user",
+      recipient_id: order.user_id?._id || order.user_id,
+      type: "order_status_updated",
+      title: "Order Status Updated",
+      message: `Your order (${order._id}) is now ${STATUS_LABELS[status] || status}.`,
+      order_id: order._id,
+    }).catch(() => {});
   } catch (err) {
     res.status(500).json({
       success: false,

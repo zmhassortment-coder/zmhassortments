@@ -25,6 +25,13 @@ const cartSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
+      availability_confirmed: {
+        type: Boolean,
+        default: false,
+      },
+      availability_confirmed_at: {
+        type: Date,
+      },
     },
   ],
   subtotal: {

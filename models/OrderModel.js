@@ -83,8 +83,22 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "paid", "shipped", "delivered", "cancelled"],
+      enum: [
+        "pending",
+        "processing",
+        "paid",
+        "shipped",
+        "at_station",
+        "rider_assigned",
+        "ready_for_pickup",
+        "delivered",
+        "cancelled",
+      ],
       default: "pending",
+    },
+    receipt_url: {
+      type: String,
+      required: false,
     },
     address: {
       type: String,

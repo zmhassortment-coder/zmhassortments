@@ -6,6 +6,7 @@ const {
   updateCartItem,
   removeFromCart,
   clearCart,
+  confirmAvailability,
 } = require("../controllers/CartController.js");
 const authenticateUser = require('../middleware/UserAuth');
 
@@ -14,6 +15,7 @@ const authenticateUser = require('../middleware/UserAuth');
 router.post("/add", authenticateUser, addToCart);
 router.get("/", authenticateUser, getCart);
 router.put("/update", authenticateUser, updateCartItem);
+router.put("/confirm-availability", authenticateUser, confirmAvailability);
 router.delete("/remove/:itemId", authenticateUser, removeFromCart);
 router.delete("/clear", authenticateUser, clearCart);
 

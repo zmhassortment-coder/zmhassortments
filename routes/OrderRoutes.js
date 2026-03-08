@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const authenticateUser = require("../middleware/UserAuth");
 const authenticateMerchant = require("../middleware/Auth");
+const upload = require("../middleware/Fileuploads");
 const {
   createOrder,
   getMyOrders,
@@ -10,7 +11,7 @@ const {
   updateOrderStatus,
 } = require("../controllers/OrderController");
 
-router.post("/api/orders", authenticateUser, createOrder);
+router.post("/api/orders", authenticateUser, upload.single("receipt"), createOrder);
 router.get("/api/orders", authenticateUser, getMyOrders);
 router.get("/api/orders/:id", authenticateUser, getOrderById);
 router.get("/api/admin/orders", authenticateMerchant, getAllOrders);

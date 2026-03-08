@@ -142,28 +142,31 @@ const updateUser = async (req, res) => {
  
  try {
   const id = req.params.id;
-  const avatarPath =  req.file ? req.file.path : null;
-  const resp = await Users.findByIdAndUpdate(
-    id,
-    {
-      fullName: req.body.fullName,
-      gender: req.body.gender,
-      phoneNumber: req.body.phoneNumber,
-      address: req.body.address,
-      avatar: avatarPath,
-    },
-    { new: true }
-  )
+  const updatePayload = {};
+
+  // Only update fields provided in the request body.
+  if (req.body.fullName !== undefined) updatePayload.fullName = req.body.fullName;
+  if (req.body.gender !== undefined) updatePayload.gender = req.body.gender;
+  if (req.body.phoneNumber !== undefined) updatePayload.phoneNumber = req.body.phoneNumber;
+  if (req.body.address !== undefined) updatePayload.address = req.body.address;
+  if (req.body.email !== undefined) updatePayload.email = req.body.email;
+
+  // Preserve existing avatar unless a new file is uploaded.
+  if (req.file?.path) {
+    updatePayload.avatar = req.file.path;
+  }
+
+  const resp = await Users.findByIdAndUpdate(id, updatePayload, { new: true });
   res.json({
     success: true,
     message: "User Updated Successfully",
     data: resp,
   });
  } catch (err) {
-  res.json({
+  res.status(500).json({
     success: false,
     message: "Failed to Update user",
-    error: err.massage,
+    error: err.message,
   });
  }
     

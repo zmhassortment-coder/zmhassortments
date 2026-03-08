@@ -48,6 +48,10 @@ exports.addToCart = async (req, res) => {
 
       existingItem.quantity = nextQty;
       existingItem.total = existingItem.quantity * price;
+      if (requiresAvailabilityConfirmation) {
+        existingItem.availability_confirmed = false;
+        existingItem.availability_confirmed_at = undefined;
+      }
     } else {
       if (
         !requiresAvailabilityConfirmation &&
@@ -66,6 +70,8 @@ exports.addToCart = async (req, res) => {
         quantity: normalizedQty,
         price,
         total: price * normalizedQty,
+        availability_confirmed: !requiresAvailabilityConfirmation,
+        availability_confirmed_at: !requiresAvailabilityConfirmation ? new Date() : undefined,
       });
     }
 
@@ -136,6 +142,10 @@ exports.updateCartItem = async (req, res) => {
 
     item.quantity = normalizedQty;
     item.total = item.price * item.quantity;
+    if (requiresAvailabilityConfirmation) {
+      item.availability_confirmed = false;
+      item.availability_confirmed_at = undefined;
+    }
 
     cart.subtotal = cart.items.reduce((sum, i) => sum + i.total, 0);
     await cart.save();
@@ -144,6 +154,51 @@ exports.updateCartItem = async (req, res) => {
   } catch (err) {
     console.error("updateCartItem error:", err);
     return res.status(500).json({ success: false, message: "Error updating cart", error: err.message });
+  }
+};
+
+// Confirm availability for a cart item (after user confirms via WhatsApp)
+exports.confirmAvailability = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { itemId } = req.body;
+
+    const cart = await Cart.findOne({ user_id: userId }).populate("items.product_id");
+    if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
+
+    const item = cart.items.id(itemId);
+    if (!item) return res.status(404).json({ success: false, message: "Item not found" });
+
+    const requiresAvailabilityConfirmation =
+      item?.product_id?.confirm_availability_before_payment === true;
+
+    if (!requiresAvailabilityConfirmation) {
+      item.availability_confirmed = true;
+      item.availability_confirmed_at = new Date();
+      await cart.save();
+      return res.status(200).json({
+        success: true,
+        message: "Availability confirmation is not required for this product",
+        data: cart,
+      });
+    }
+
+    item.availability_confirmed = true;
+    item.availability_confirmed_at = new Date();
+    await cart.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Availability confirmed",
+      data: cart,
+    });
+  } catch (err) {
+    console.error("confirmAvailability error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Error confirming availability",
+      error: err.message,
+    });
   }
 };
 
