@@ -83,7 +83,16 @@ const loginUser = async (req, res) => {
       .cookie("token", token, cookieOptionsToken)
       .cookie("user", JSON.stringify(safeUser), cookieOptionsUser)
       .status(200)
-      .json({ user: safeUser });
+      .json({
+        success: true,
+        message: "Login successful",
+        token,
+        user: safeUser,
+        data: {
+          token,
+          user: safeUser,
+        },
+      });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Login failed", error: err.message });
