@@ -119,21 +119,26 @@ const getAllUsers = (req, res) => {
 };
 
 const getsingleUser = (req, res) => {
- 
-  const id = req.params.user_id;
-  Users.findOne(id,{}, {password: 0, __v: 0})
+  const id = req.params.id;
+  Users.findById(id, { password: 0, __v: 0 })
     .then((resp) => {
+      if (!resp) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
       res.json({
         success: true,
-        message: "All Users",
+        message: "User",
         data: resp,
       });
     })
     .catch((err) => {
-      res.json({
+      res.status(500).json({
         success: false,
-        message: "Failed to Fetch users",
-        error: err.massage,
+        message: "Failed to fetch user",
+        error: err.message,
       });
     });
 };

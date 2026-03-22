@@ -117,6 +117,9 @@ const createOrder = async (req, res) => {
         quantity,
         total,
         image: item.image || null,
+        selected_option: item.selected_option || "",
+        selected_colour: item.selected_colour || "",
+        selected_image: item.selected_image || "",
         currency: item.currency || null,
       });
     }

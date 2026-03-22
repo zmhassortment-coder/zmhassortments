@@ -27,6 +27,18 @@ const orderItemSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    selected_option: {
+      type: String,
+      required: false,
+    },
+    selected_colour: {
+      type: String,
+      required: false,
+    },
+    selected_image: {
+      type: String,
+      required: false,
+    },
     currency: {
       type: String,
       required: false,

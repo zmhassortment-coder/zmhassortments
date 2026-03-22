@@ -5,7 +5,13 @@ const Product = require("../models/ProductModel");
 exports.addToCart = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { product_id, quantity = 1 } = req.body;
+    const {
+      product_id,
+      quantity = 1,
+      selected_option = "",
+      selected_colour = "",
+      selected_image = "",
+    } = req.body;
     const normalizedQty = Number(quantity);
 
     const product = await Product.findById(product_id);
@@ -19,6 +25,7 @@ exports.addToCart = async (req, res) => {
 
     const price = parseFloat(product.price) || 0;
     const productStock = Number(product.quantity);
+    const minQty = Math.max(1, Number(product.min_qty) || 1);
     const requiresAvailabilityConfirmation =
       product.confirm_availability_before_payment === true;
 
@@ -28,8 +35,18 @@ exports.addToCart = async (req, res) => {
       cart = new Cart({ user_id: userId, items: [], subtotal: 0 });
     }
 
-    const existingItem = cart.items.find(
-      (item) => item.product_id.toString() === product_id
+    if (normalizedQty < minQty) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order quantity for this product is ${minQty}`,
+      });
+    }
+
+    const existingItem = cart.items.find((item) =>
+      item.product_id.toString() === product_id &&
+      String(item.selected_option || "") === String(selected_option || "") &&
+      String(item.selected_colour || "") === String(selected_colour || "") &&
+      String(item.selected_image || "") === String(selected_image || "")
     );
 
     if (existingItem) {
@@ -70,6 +87,10 @@ exports.addToCart = async (req, res) => {
         quantity: normalizedQty,
         price,
         total: price * normalizedQty,
+        selected_option: selected_option || "",
+        selected_colour: selected_colour || "",
+        selected_image: selected_image || "",
+        min_qty: minQty,
         availability_confirmed: !requiresAvailabilityConfirmation,
         availability_confirmed_at: !requiresAvailabilityConfirmation ? new Date() : undefined,
       });
@@ -125,8 +146,16 @@ exports.updateCartItem = async (req, res) => {
     }
 
     const productStock = Number(product.quantity);
+    const minQty = Math.max(1, Number(product.min_qty) || Number(item.min_qty) || 1);
     const requiresAvailabilityConfirmation =
       product.confirm_availability_before_payment === true;
+
+    if (normalizedQty < minQty) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order quantity for this product is ${minQty}`,
+      });
+    }
 
     if (
       !requiresAvailabilityConfirmation &&
@@ -142,6 +171,7 @@ exports.updateCartItem = async (req, res) => {
 
     item.quantity = normalizedQty;
     item.total = item.price * item.quantity;
+    item.min_qty = minQty;
     if (requiresAvailabilityConfirmation) {
       item.availability_confirmed = false;
       item.availability_confirmed_at = undefined;

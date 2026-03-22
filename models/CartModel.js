@@ -25,6 +25,23 @@ const cartSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
+      selected_option: {
+        type: String,
+        required: false,
+      },
+      selected_colour: {
+        type: String,
+        required: false,
+      },
+      selected_image: {
+        type: String,
+        required: false,
+      },
+      min_qty: {
+        type: Number,
+        required: false,
+        default: 1,
+      },
       availability_confirmed: {
         type: Boolean,
         default: false,

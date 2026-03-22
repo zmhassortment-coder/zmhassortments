@@ -7,7 +7,7 @@ const {updateproduct,deleteProduct, GetSingleproduct, GetAllproduct, CreateProdu
 router.post("/api/create-product/:merchant_id/:category_id",authenticateToken,upload.array('images'),CreateProduct)
 router.get("/api/products", GetAllproduct)
 router.get("/api/singleproduct/:id", GetSingleproduct)
-router.put("/api/update-product/:id",authenticateToken, upload.single('images'),updateproduct)
+router.put("/api/update-product/:id",authenticateToken, upload.array('images'),updateproduct)
 router.put("/api/add_trending/:id/:productid",authenticateToken, TrendingProduct);
 router.put("/api/add_featured/:id/:productid",authenticateToken, featuredProduct);
 router.put("/api/remove_from_featured/:id/:productid",authenticateToken, RemovefromFeatured);

@@ -41,6 +41,18 @@ const CreateProduct = async (req, res) => {
       title: req.body.title,
       descp: req.body.descp,
       images: imagesPaths, // <-- array of image paths
+      Productoption: Array.isArray(req.body.Productoption)
+        ? req.body.Productoption
+        : String(req.body.Productoption || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+      colours: Array.isArray(req.body.colours)
+        ? req.body.colours
+        : String(req.body.colours || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
       price: req.body.price,
       currency: req.body.currency,
       brand: req.body.brand,
