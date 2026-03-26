@@ -2,6 +2,16 @@ const Product = require("../models/ProductModel");
 const Merchant = require("../models/MerchantModel");
 const Category = require("../models/CategoryModel");
 
+const toStringArray = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
 const CreateProduct = async (req, res) => {
   try {
     const merchantId = (req.merchant && req.merchant._id) || req.params.merchant_id;
@@ -60,7 +70,7 @@ const CreateProduct = async (req, res) => {
       min_qty: req.body.min_qty,
       max_qty: req.body.max_qty,
       discount: req.body.discount,
-      shipping_locations: req.body.shipping_locations,
+      shipping_locations: toStringArray(req.body.shipping_locations),
       confirm_availability_before_payment: confirmAvailability,
       show_stock_quantity: showStockQuantity,
       product_type: normalizedType,
@@ -189,12 +199,7 @@ const updateproduct = async (req, res) => {
     Object.keys(req.body).forEach((field) => {
       if (req.body[field] !== undefined && req.body[field] !== "") {
         if (["Productoption", "colours", "shipping_locations"].includes(field)) {
-          product[field] = Array.isArray(req.body[field])
-            ? req.body[field]
-            : req.body[field]
-                .split(",")
-                .map((v) => v.trim())
-                .filter((v) => v.length > 0);
+          product[field] = toStringArray(req.body[field]);
         } else if (
           [
             "is_trending",

@@ -62,9 +62,9 @@ const productSchema = new Schema({
     required: false,
   },
   shipping_locations:{
-    type: String,
+    type: [String],
     required: false,
-    default:[],
+    default: [],
   },
   confirm_availability_before_payment: {
     type: Boolean,
